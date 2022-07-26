@@ -1,3 +1,11 @@
+
+src/pickles/MNIST intermediate results/*.pickle
+src/pickles/*_MNIST_results_df.pickle
+
+
+
+################################################
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
