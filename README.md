@@ -12,12 +12,12 @@ The code is written in Python 3.9. To automatically set up a Conda environment w
 
 ## Citation
 
-Julia A. Meister, Khuong An Nguyen, and Zhiyuan Luo. "A Confident Deep Learning loss function for one-step Conformal Prediction approximation." (2022). https://arxiv.org/abs/2207.12377
+Julia A. Meister, Khuong An Nguyen, Stelios Kapetanakis, and Zhiyuan Luo. "A Confident Deep Learning loss function for one-step Conformal Prediction approximation." (2022). https://arxiv.org/abs/2207.12377
 
 
 @misc{meister2022confident,
     title={A Confident Deep Learning loss function for one-step Conformal Prediction approximation},
-    author={Julia A. Meister and Khuong An Nguyen and Zhiyuan Luo},
+    author={Julia A. Meister and Khuong An Nguyen and Stelios Kapetanakis and Zhiyuan Luo},
     year={2022},
     eprint={2207.12377},
     archivePrefix={arXiv},
