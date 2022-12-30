@@ -5,7 +5,8 @@ import pickle
 from scipy import stats
 from tensorflow.keras import datasets
 import time
-
+import h5py
+from functools import reduce
 
 
 def load_mnist():
@@ -18,7 +19,33 @@ def load_mnist():
     return X_train, y_train, X_test, y_test
 
 
-def test_loss_func(n_class, model, model_name, X_train, y_train, X_test, y_test, batch_size, filename, save_dir):   
+def load_usps_hdf5(path="../data/usps.h5", data_key="data", target_key="target", flatten=True):
+    """
+        loads data from hdf5: 
+        - hdf5 should have 'train' and 'test' groups 
+        - each group should have 'data' and 'target' dataset or spcify the key
+        - flatten means to flatten images N * (C * H * W) as N * D array
+        
+        Following the kaggle example (https://www.kaggle.com/bistaumanga/usps-getting-started).
+    """
+    with h5py.File(path, 'r') as hf:
+        train = hf.get('train')
+        X_train = train.get(data_key)[:]
+        y_train = train.get(target_key)[:]
+        test = hf.get('test')
+        X_test = test.get(data_key)[:]
+        y_test = test.get(target_key)[:]
+        if flatten:
+            X_train = X_train.reshape(X_train.shape[0], reduce(lambda a, b: a * b, X_train.shape[1:]))
+            X_test = X_test.reshape(X_test.shape[0], reduce(lambda a, b: a * b, X_test.shape[1:]))
+            
+        X_train = np.reshape(X_train, (-1, 16, 16, 1))
+        X_test = np.reshape(X_test, (-1, 16, 16, 1))
+
+    return X_train, y_train, X_test, y_test
+
+
+def test_loss_func(n_class, model, X_train, y_train, X_test, y_test, batch_size, filename, save_dir):   
     for i in range(0, 10):
         savename = '{}/{} - {}.pickle'.format(save_dir, i, filename)
 
@@ -61,6 +88,7 @@ def calc_efficiency_metrics(p_values, labels, eps=np.arange(0, 1.05, 0.05)):
         
     return avg_set_sizes, empty_set_rates, singleton_set_rates, multi_set_rates
 
+
 def calc_error_rates(p_values, labels, eps=np.arange(0, 1.05, 0.05)):
     error_rates = np.ones(eps.shape)
     true_p_values = p_values[np.arange(labels.shape[0]), labels]
@@ -73,12 +101,13 @@ def calc_error_rates(p_values, labels, eps=np.arange(0, 1.05, 0.05)):
     return error_rates, accuracy_rates
 
 
-def generate_results_df(model_name, save_dir, y_test, eps=np.arange(0, 1.05, 0.05)):
+def generate_results_df(model_name, data_name, save_dir, y_test, eps=np.arange(0, 1.05, 0.05)):
     df = pd.DataFrame(columns=['iter', 'loss', 'ks_pvalue', 'max_single', 'max_single_e', 'model', 'time_train', 'time_test', 'ks_stat', 'data', 'filepath'])
 
     iterations = list()
     losses = list()
     ks_pvalues = list()
+    abs_calib_distances = list()
     max_single_tests = list()
     max_single_e_tests = list()
     filepaths = list()
@@ -96,6 +125,7 @@ def generate_results_df(model_name, save_dir, y_test, eps=np.arange(0, 1.05, 0.0
         results = pickle.load(open(filepath, 'rb'))
 
         _, _, single_rates, _ = calc_efficiency_metrics(results['pvalues']['test'], y_test, eps)
+        error_rates, _ = calc_error_rates(results['pvalues']['test'], y_test, eps)
 
         true_indx = np.full_like(results['pvalues']['test'], False, dtype=bool)
         true_indx[np.arange(y_test.shape[0]), y_test] = True
@@ -106,18 +136,20 @@ def generate_results_df(model_name, save_dir, y_test, eps=np.arange(0, 1.05, 0.0
         iterations.append(int(file.split('/')[-1].split('-')[0]))
         losses.append("-".join(file.split("/")[-1].split('-')[1:]).strip())
         ks_pvalues.append(ks_p)
+        abs_calib_distances.append(np.sum(np.absolute(eps-error_rates)))
         max_single_tests.append(np.max(single_rates))
         max_single_e_tests.append(eps[np.argmax(single_rates)])
         filepaths.append(filepath)
         models.append("FFNN")
         time_trains.append(results['durations']['train'])
         time_tests.append(results['durations']['test'])
-        datas.append("MNIST")
+        datas.append(data_name)
         ks_stats.append(ks_stat)
 
     df['iter'] = iterations
     df['loss'] = losses
     df['ks_pvalue'] = ks_pvalues
+    df['abs_calib_distance'] = abs_calib_distances
     df['max_single'] = max_single_tests
     df['max_single_e'] = max_single_e_tests
     df['filepath'] = filepaths
@@ -127,7 +159,7 @@ def generate_results_df(model_name, save_dir, y_test, eps=np.arange(0, 1.05, 0.0
     df['ks_stat'] = ks_stats
     df['data'] = datas
     
-    filename = "./pickles/{}_MNIST_results_df.pickle".format(model_name)
+    filename = "./pickles/{}_{}_results_df.pickle".format(model_name, data_name)
     pickle.dump(df, open(filename, 'wb'))
     
     return df
@@ -177,3 +209,17 @@ def generate_distance_metrics(df, y_test, eps=np.array([0.05, 0.1, 0.2])):
     avgs = np.array(avgs)
 
     return df_temp, dists, avgs
+
+
+def savefig(fig, filename):
+    path = filename
+    fig.savefig(path, bbox_inches='tight', dpi=300)
+    print("SAVED: "+path)
+    
+    
+def calc_fuzziness(pvalues):
+    imax = pvalues.argmax(axis=1)
+    mask = np.ones(pvalues.shape, dtype='bool')
+    mask[range(0, len(pvalues)), imax] = 0
+        
+    return np.sum(pvalues[mask]) / len(pvalues)
